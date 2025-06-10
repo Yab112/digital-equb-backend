@@ -7,7 +7,10 @@ import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { EqubGroupsModule } from './equb-groups/equb-groups.module';
 import { TransactionsModule } from './transactions/transactions.module';
+import * as redisStore from 'cache-manager-redis-store';
 import { CommonModule } from './common/common.module';
+import { User } from './users/user.entity';
+import { CacheModule } from '@nestjs/cache-manager';
 
 @Module({
   imports: [
@@ -29,9 +32,21 @@ import { CommonModule } from './common/common.module';
           rejectUnauthorized: false, // Required for connections to cloud databases
         },
 
-        entities: [],
+        entities: [User],
         synchronize: true, // Good for development, should be false in production
       }),
+    }),
+
+    CacheModule.registerAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => ({
+        store: redisStore,
+        host: configService.get<string>('REDIS_HOST'),
+        port: configService.get<number>('REDIS_PORT'),
+        ttl: 300, // Default TTL for cache keys (in seconds) -> 5 minutes
+      }),
+      isGlobal: true, // Make CacheModule available globally
     }),
 
     AuthModule,
