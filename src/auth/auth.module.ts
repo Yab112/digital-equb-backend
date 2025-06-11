@@ -6,11 +6,14 @@ import { UsersModule } from '../users/users.module';
 import { GoogleStrategy } from './google.strategy';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
+import { CommonModule } from 'src/common/common.module';
+import { JwtStrategy } from './jwt.strategy';
 
 @Module({
   imports: [
     PassportModule,
     UsersModule, // Add UsersModule here
+    CommonModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -21,6 +24,6 @@ import { AuthController } from './auth.controller';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, GoogleStrategy],
+  providers: [AuthService, GoogleStrategy, JwtStrategy],
 })
 export class AuthModule {}

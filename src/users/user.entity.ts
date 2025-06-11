@@ -11,17 +11,21 @@ export class User {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ unique: true, nullable: true }) // Email can be null for SMS-only users
+  @Column({ unique: true, nullable: true, type: 'varchar' }) // Email can be null for SMS-only users
   email: string | null;
 
-  @Column({ nullable: true })
+  @Column({ nullable: true, type: 'varchar' })
   name: string | null;
 
-  @Column({ name: 'google_id', unique: true, nullable: true })
+  @Column({ name: 'google_id', unique: true, nullable: true, type: 'varchar' })
   googleId: string | null;
 
-  // --- NEW FIELD ---
-  @Column({ name: 'phone_number', unique: true, nullable: true })
+  @Column({
+    name: 'phone_number',
+    unique: true,
+    nullable: true,
+    type: 'varchar',
+  })
   phoneNumber: string | null;
 
   @CreateDateColumn({ name: 'created_at' })
@@ -38,4 +42,7 @@ export class User {
 
   @Column({ name: 'is_active', default: false })
   isActive: boolean;
+
+  @Column({ nullable: true, type: 'varchar' })
+  password: string | null;
 }

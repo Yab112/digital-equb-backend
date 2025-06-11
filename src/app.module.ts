@@ -24,16 +24,13 @@ import { CacheModule } from '@nestjs/cache-manager';
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
         type: 'postgres',
-        // Use the single connection string from Neon
         url: configService.get<string>('DATABASE_URL'),
 
-        // Neon requires an SSL connection
         ssl: {
-          rejectUnauthorized: false, // Required for connections to cloud databases
+          rejectUnauthorized: false,
         },
 
         entities: [User],
-        synchronize: true, // Good for development, should be false in production
       }),
     }),
 
