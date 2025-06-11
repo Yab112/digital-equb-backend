@@ -17,6 +17,7 @@ import { AuthService } from './auth.service';
 // DTO Imports
 import { StartRegistrationDto } from './dto/start-registration.dto';
 import { VerifyPhoneDto } from './dto/verify-phone.dto';
+import { ResendPhoneVerificationDto } from './dto/resend-phone-verification.dto';
 import { RequestLoginOtpDto } from './dto/request-login-otp.dto';
 import { VerifyLoginOtpDto } from './dto/verify-login-otp.dto';
 import { LoginWithPasswordDto } from './dto/login-with-password.dto';
@@ -65,6 +66,14 @@ export class AuthController {
       dto.name,
     );
     return { message: 'Verification OTP sent to your phone number.' };
+  }
+
+  @Post('register/resend-otp')
+  async resendOtp(
+    @Body() dto: ResendPhoneVerificationDto,
+  ): Promise<{ message: string }> {
+    await this.authService.resendPhoneVerificationOtp(dto.phoneNumber);
+    return { message: 'A new verification OTP has been sent.' };
   }
 
   @Post('register/verify-phone')

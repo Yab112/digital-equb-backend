@@ -144,44 +144,95 @@ export class AuthService {
     );
   }
 
-  async verifyPhoneNumber(phoneNumber: string, otp: string): Promise<void> {
+  async resendPhoneVerificationOtp(phoneNumber: string): Promise<void> {
     const phoneKey = `registration-phone:${phoneNumber}`;
-
     const registrationKey =
       await this.upstashService.redis.get<string>(phoneKey);
-    if (!registrationKey)
-      throw new HttpException('Registration not found.', HttpStatus.NOT_FOUND);
 
+    if (!registrationKey) {
+      throw new HttpException(
+        'No pending registration found for this phone number.',
+        HttpStatus.NOT_FOUND,
+      );
+    }
+
+    const otp = this._generateOtp();
+    await this.upstashService.redis.set(
+      `otp:phone-verify:${phoneNumber}`,
+      otp,
+      { ex: 300 }, // 5-minute expiry
+    );
+
+    await this.twilioService.sendSms(
+      phoneNumber,
+      `Your new Digital Equb verification code is: ${otp}`,
+    );
+  }
+
+  async verifyPhoneNumber(phoneNumber: string, otp: string): Promise<void> {
+    const phoneKey = `registration-phone:${phoneNumber}`;
+    const otpKey = `otp:phone-verify:${phoneNumber}`;
+
+    // 1. Get registration key by phone
+    const registrationKey =
+      await this.upstashService.redis.get<string>(phoneKey);
+    if (!registrationKey) {
+      throw new HttpException('Registration not found.', HttpStatus.NOT_FOUND);
+    }
+
+    // 2. Load registration data
     const registrationDataRaw =
       await this.upstashService.redis.get<string>(registrationKey);
-    const registrationData: PendingRegistration = registrationDataRaw
-      ? JSON.parse(registrationDataRaw)
-      : null;
+    if (!registrationDataRaw) {
+      throw new HttpException(
+        'Registration data missing.',
+        HttpStatus.NOT_FOUND,
+      );
+    }
 
-    if (!registrationData)
-      throw new HttpException('Registration not found.', HttpStatus.NOT_FOUND);
+    let registrationData: PendingRegistration;
+    try {
+      registrationData = JSON.parse(registrationDataRaw) as PendingRegistration;
+    } catch (e) {
+      throw new HttpException(
+        'Corrupted registration data.',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
 
-    const storedOtp = await this.upstashService.redis.get<string>(
-      `otp:phone-verify:${phoneNumber}`,
-    );
-    if (storedOtp !== otp)
+    // 3. Compare OTP
+    const storedOtp = await this.upstashService.redis.get<string>(otpKey);
+    this.logger.log(`[DEBUG] OTP raw value from Redis: ${storedOtp} (type: ${typeof storedOtp})`);
+    if (typeof storedOtp === 'object' || storedOtp === null) {
+      this.logger.error(`[CRITICAL] OTP value is not a string! Value: ${JSON.stringify(storedOtp)}`);
+      throw new HttpException(
+        'OTP value in Redis is not a string. Please clear your Redis keys for this phone and try again.',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+    if (!storedOtp || storedOtp !== otp) {
       throw new HttpException(
         'Invalid or expired OTP.',
         HttpStatus.BAD_REQUEST,
       );
+    }
 
+    // 4. Mark phone as verified
     registrationData.phoneVerified = true;
-    const expiryOptions: SetCommandOptions = { ex: 3600 };
 
+    // 5. Save back updated registration
+    const expiryOptions: SetCommandOptions = { ex: 3600 };
     await this.upstashService.redis.set(
       registrationKey,
       JSON.stringify(registrationData),
       expiryOptions,
     );
 
-    await this.upstashService.redis.del(`otp:phone-verify:${phoneNumber}`);
+    // 6. Clean up OTP
+    await this.upstashService.redis.del(otpKey);
 
-    const emailToken = uuidv4();
+    // 7. Generate and send email verification token
+    const emailToken = uuidv4(); // Make sure uuidv4() is imported
     await this.upstashService.redis.set(
       `email-verify-token:${emailToken}`,
       registrationKey,
@@ -195,52 +246,71 @@ export class AuthService {
   }
 
   async verifyEmailAndActivate(token: string): Promise<User> {
-    const registrationKey = await this.upstashService.redis.get<string>(
-      `email-verify-token:${token}`,
-    );
-    if (!registrationKey)
+    const emailTokenKey = `email-verify-token:${token}`;
+
+    // 1. Get registration key from token
+    const registrationKey =
+      await this.upstashService.redis.get<string>(emailTokenKey);
+    if (!registrationKey) {
       throw new HttpException(
         'Invalid or expired verification link.',
         HttpStatus.BAD_REQUEST,
       );
+    }
 
+    // 2. Get registration data
     const registrationDataRaw =
       await this.upstashService.redis.get<string>(registrationKey);
-    const registrationData: PendingRegistration = registrationDataRaw
-      ? JSON.parse(registrationDataRaw)
-      : null;
-
-    if (!registrationData)
+    if (!registrationDataRaw) {
       throw new HttpException('Registration not found.', HttpStatus.NOT_FOUND);
+    }
 
+    let registrationData: PendingRegistration;
+    try {
+      registrationData = JSON.parse(registrationDataRaw) as PendingRegistration;
+    } catch (e) {
+      this.logger.error(`Failed to parse registration data: ${e}`);
+      throw new HttpException(
+        'Corrupted registration data.',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+
+    // 3. Mark email as verified
     registrationData.emailVerified = true;
-    const expiryOptions: SetCommandOptions = { ex: 3600 };
 
+    // 4. Save updated registration
+    const expiryOptions: SetCommandOptions = { ex: 3600 };
     await this.upstashService.redis.set(
       registrationKey,
       JSON.stringify(registrationData),
       expiryOptions,
     );
 
-    // If both verified, create user in DB
+    // 5. If both verifications are complete, activate user
     if (registrationData.phoneVerified && registrationData.emailVerified) {
       const user = await this.usersService.create({
         email: registrationData.email,
         phoneNumber: registrationData.phoneNumber,
-        password: registrationData.password,
+        password: registrationData.password, // Already hashed
         name: registrationData.name,
         googleId: null,
         isActive: true,
         isEmailVerified: true,
         isPhoneNumberVerified: true,
       });
+
+      // 6. Clean up Redis keys
       await this.upstashService.redis.del(registrationKey);
       await this.upstashService.redis.del(
         `registration-phone:${registrationData.phoneNumber}`,
       );
-      await this.upstashService.redis.del(`email-verify-token:${token}`);
+      await this.upstashService.redis.del(emailTokenKey);
+
       return user;
     }
+
+    // 7. If phone not verified yet
     throw new HttpException(
       'Phone or email not verified yet.',
       HttpStatus.BAD_REQUEST,
