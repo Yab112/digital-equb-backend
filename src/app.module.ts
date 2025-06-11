@@ -39,8 +39,7 @@ import { CacheModule } from '@nestjs/cache-manager';
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
         store: redisStore,
-        host: configService.get<string>('REDIS_HOST'),
-        port: configService.get<number>('REDIS_PORT'),
+        url: configService.get<string>('REDIS_URL'),
         ttl: 300, // Default TTL for cache keys (in seconds) -> 5 minutes
       }),
       isGlobal: true, // Make CacheModule available globally

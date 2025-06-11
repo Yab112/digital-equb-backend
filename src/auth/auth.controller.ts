@@ -62,6 +62,7 @@ export class AuthController {
       dto.email,
       dto.phoneNumber,
       dto.password,
+      dto.name,
     );
     return { message: 'Verification OTP sent to your phone number.' };
   }

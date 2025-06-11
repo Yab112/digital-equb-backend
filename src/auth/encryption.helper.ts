@@ -5,7 +5,10 @@ export class EncryptionHelper {
     return bcrypt.hash(password, 10);
   }
 
-  static async comparePassword(password: string, hash: string): Promise<boolean> {
+  static async comparePassword(
+    password: string,
+    hash: string,
+  ): Promise<boolean> {
     return bcrypt.compare(password, hash);
   }
 }

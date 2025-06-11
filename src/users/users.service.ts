@@ -26,16 +26,21 @@ export class UsersService {
     email: string;
     phoneNumber: string;
     password: string;
+    name: string;
+    googleId: string | null;
+    isActive: boolean;
+    isEmailVerified: boolean;
+    isPhoneNumberVerified: boolean;
   }): Promise<User> {
     const newUser = this.usersRepository.create({
       email: dto.email,
       phoneNumber: dto.phoneNumber,
       password: dto.password,
-      name: null,
-      googleId: null,
-      isActive: false,
-      isEmailVerified: false,
-      isPhoneNumberVerified: false,
+      name: dto.name,
+      googleId: dto.googleId,
+      isActive: dto.isActive,
+      isEmailVerified: dto.isEmailVerified,
+      isPhoneNumberVerified: dto.isPhoneNumberVerified,
     });
     return this.usersRepository.save(newUser);
   }

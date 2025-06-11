@@ -1,7 +1,5 @@
-import { HttpException, HttpStatus, Inject, Injectable } from '@nestjs/common';
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { Cache } from 'cache-manager';
 import { randomInt } from 'crypto';
 import { isEmail, isPhoneNumber } from 'class-validator';
 import { v4 as uuidv4 } from 'uuid';
@@ -13,6 +11,9 @@ import { TwilioService } from '../common/twilio.service';
 import { EmailService } from '../common/email.service';
 import { EncryptionHelper } from './encryption.helper';
 import { JwtHelper } from './jwt.helper';
+import { PendingRegistration } from './dto/pending-registration.type';
+import { UpstashService } from '../common/upstash.service';
+import { SetCommandOptions } from '@upstash/redis';
 
 type OAuthUserDetails = { googleId: string; email: string; name: string };
 
@@ -24,7 +25,7 @@ export class AuthService {
     private readonly logger: LoggerService,
     private readonly twilioService: TwilioService,
     private readonly emailService: EmailService,
-    @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+    private readonly upstashService: UpstashService,
   ) {
     this.logger.setContext(AuthService.name);
   }
@@ -82,39 +83,86 @@ export class AuthService {
     email: string,
     phoneNumber: string,
     password: string,
-  ): Promise<User> {
-    const existingUser =
-      (await this.usersService.findByEmail(email)) ||
-      (await this.usersService.findByPhoneNumber(phoneNumber));
-    if (existingUser?.isActive) {
+    name: string,
+  ): Promise<void> {
+    const registrationKey = `registration:${email}`;
+    const phoneKey = `registration-phone:${phoneNumber}`;
+
+    // DEBUG: Log Upstash connection and set/get result
+    try {
+      const ping = await this.upstashService.redis.ping?.();
+      this.logger.log(`[Upstash] Redis ping: ${ping}`);
+    } catch (e) {
+      this.logger.error(`[Upstash] Redis ping failed: ${e}`);
+    }
+
+    const existing =
+      await this.upstashService.redis.get<string>(registrationKey);
+    this.logger.log(`[Upstash] GET ${registrationKey}: ${existing}`);
+
+    if (existing) {
       throw new HttpException(
-        'An active user with this email or phone number already exists.',
+        'Registration already started for this email.',
         HttpStatus.CONFLICT,
       );
     }
-    const hashedPassword = await EncryptionHelper.hashPassword(password);
-    const user =
-      existingUser ||
-      (await this.usersService.create({
-        email,
-        phoneNumber,
-        password: hashedPassword,
-      }));
+
     const otp = this._generateOtp();
-    await this.cacheManager.set(`otp:phone-verify:${user.id}`, otp, 300);
+    const hashedPassword = await EncryptionHelper.hashPassword(password);
+    const registrationData: PendingRegistration = {
+      email,
+      phoneNumber,
+      password: hashedPassword,
+      name,
+      phoneVerified: false,
+      emailVerified: false,
+    };
+
+    const expiryOptions: SetCommandOptions = { ex: 3600 };
+    await this.upstashService.redis.set(
+      registrationKey,
+      JSON.stringify(registrationData),
+      expiryOptions,
+    );
+    this.logger.log(`[Upstash] SET ${registrationKey}`);
+
+    await this.upstashService.redis.set(
+      phoneKey,
+      registrationKey,
+      expiryOptions,
+    );
+
+    await this.upstashService.redis.set(
+      `otp:phone-verify:${phoneNumber}`,
+      otp,
+      { ex: 300 },
+    );
+
     await this.twilioService.sendSms(
       phoneNumber,
       `Your Digital Equb verification code is: ${otp}`,
     );
-    return user;
   }
 
   async verifyPhoneNumber(phoneNumber: string, otp: string): Promise<void> {
-    const user = await this.usersService.findByPhoneNumber(phoneNumber);
-    if (!user) throw new HttpException('User not found.', HttpStatus.NOT_FOUND);
+    const phoneKey = `registration-phone:${phoneNumber}`;
 
-    const storedOtp = await this.cacheManager.get<string>(
-      `otp:phone-verify:${user.id}`,
+    const registrationKey =
+      await this.upstashService.redis.get<string>(phoneKey);
+    if (!registrationKey)
+      throw new HttpException('Registration not found.', HttpStatus.NOT_FOUND);
+
+    const registrationDataRaw =
+      await this.upstashService.redis.get<string>(registrationKey);
+    const registrationData: PendingRegistration = registrationDataRaw
+      ? JSON.parse(registrationDataRaw)
+      : null;
+
+    if (!registrationData)
+      throw new HttpException('Registration not found.', HttpStatus.NOT_FOUND);
+
+    const storedOtp = await this.upstashService.redis.get<string>(
+      `otp:phone-verify:${phoneNumber}`,
     );
     if (storedOtp !== otp)
       throw new HttpException(
@@ -122,40 +170,81 @@ export class AuthService {
         HttpStatus.BAD_REQUEST,
       );
 
-    await this.usersService.update(user.id, { isPhoneNumberVerified: true });
-    await this.cacheManager.del(`otp:phone-verify:${user.id}`);
+    registrationData.phoneVerified = true;
+    const expiryOptions: SetCommandOptions = { ex: 3600 };
 
-    const emailToken = uuidv4();
-    await this.cacheManager.set(
-      `email-verify-token:${emailToken}`,
-      user.id,
-      3600,
+    await this.upstashService.redis.set(
+      registrationKey,
+      JSON.stringify(registrationData),
+      expiryOptions,
     );
 
-    if (!user.email)
-      throw new HttpException(
-        'User has no email to verify.',
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    await this.emailService.sendVerificationEmail(user.email, emailToken);
+    await this.upstashService.redis.del(`otp:phone-verify:${phoneNumber}`);
+
+    const emailToken = uuidv4();
+    await this.upstashService.redis.set(
+      `email-verify-token:${emailToken}`,
+      registrationKey,
+      expiryOptions,
+    );
+
+    await this.emailService.sendVerificationEmail(
+      registrationData.email,
+      emailToken,
+    );
   }
 
   async verifyEmailAndActivate(token: string): Promise<User> {
-    const userId = await this.cacheManager.get<string>(
+    const registrationKey = await this.upstashService.redis.get<string>(
       `email-verify-token:${token}`,
     );
-    if (!userId)
+    if (!registrationKey)
       throw new HttpException(
         'Invalid or expired verification link.',
         HttpStatus.BAD_REQUEST,
       );
 
-    const user = await this.usersService.update(userId, {
-      isEmailVerified: true,
-      isActive: true,
-    });
-    await this.cacheManager.del(`email-verify-token:${token}`);
-    return user;
+    const registrationDataRaw =
+      await this.upstashService.redis.get<string>(registrationKey);
+    const registrationData: PendingRegistration = registrationDataRaw
+      ? JSON.parse(registrationDataRaw)
+      : null;
+
+    if (!registrationData)
+      throw new HttpException('Registration not found.', HttpStatus.NOT_FOUND);
+
+    registrationData.emailVerified = true;
+    const expiryOptions: SetCommandOptions = { ex: 3600 };
+
+    await this.upstashService.redis.set(
+      registrationKey,
+      JSON.stringify(registrationData),
+      expiryOptions,
+    );
+
+    // If both verified, create user in DB
+    if (registrationData.phoneVerified && registrationData.emailVerified) {
+      const user = await this.usersService.create({
+        email: registrationData.email,
+        phoneNumber: registrationData.phoneNumber,
+        password: registrationData.password,
+        name: registrationData.name,
+        googleId: null,
+        isActive: true,
+        isEmailVerified: true,
+        isPhoneNumberVerified: true,
+      });
+      await this.upstashService.redis.del(registrationKey);
+      await this.upstashService.redis.del(
+        `registration-phone:${registrationData.phoneNumber}`,
+      );
+      await this.upstashService.redis.del(`email-verify-token:${token}`);
+      return user;
+    }
+    throw new HttpException(
+      'Phone or email not verified yet.',
+      HttpStatus.BAD_REQUEST,
+    );
   }
 
   async requestLoginOtp(identifier: string): Promise<void> {
@@ -164,7 +253,9 @@ export class AuthService {
       throw new HttpException('No active account found.', HttpStatus.NOT_FOUND);
 
     const otp = this._generateOtp();
-    await this.cacheManager.set(`otp:login:${identifier}`, otp, 300);
+    await this.upstashService.redis.set(`otp:login:${identifier}`, otp, {
+      ex: 300,
+    });
 
     if (isEmail(identifier)) {
       if (!user.email)
@@ -187,7 +278,7 @@ export class AuthService {
   }
 
   async verifyLoginOtp(identifier: string, otp: string): Promise<User> {
-    const storedOtp = await this.cacheManager.get<string>(
+    const storedOtp = await this.upstashService.redis.get<string>(
       `otp:login:${identifier}`,
     );
     if (storedOtp !== otp)
@@ -199,7 +290,7 @@ export class AuthService {
     const user = await this._findUserByIdentifier(identifier);
     if (!user) throw new HttpException('User not found.', HttpStatus.NOT_FOUND);
 
-    await this.cacheManager.del(`otp:login:${identifier}`);
+    await this.upstashService.redis.del(`otp:login:${identifier}`);
     return user;
   }
 
