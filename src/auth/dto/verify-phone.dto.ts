@@ -8,6 +8,6 @@ export class VerifyPhoneDto {
 
   @IsString()
   @IsNotEmpty()
-  @Length(6, 6, { message: 'OTP must be 6 digits' })
+  @Length(6, 6, { message: 'OTP must be 6 digits and a string' })
   readonly otp: string;
 }

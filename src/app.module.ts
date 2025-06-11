@@ -31,6 +31,7 @@ import { CacheModule } from '@nestjs/cache-manager';
         },
 
         entities: [User],
+        synchronize: true,
       }),
     }),
 

@@ -107,7 +107,7 @@ export class AuthService {
       );
     }
 
-    const otp = this._generateOtp();
+    const otp = Number(this._generateOtp());
     const hashedPassword = await EncryptionHelper.hashPassword(password);
     const registrationData: PendingRegistration = {
       email,
@@ -156,7 +156,7 @@ export class AuthService {
       );
     }
 
-    const otp = this._generateOtp();
+    const otp = Number(this._generateOtp());
     await this.upstashService.redis.set(
       `otp:phone-verify:${phoneNumber}`,
       otp,
@@ -173,6 +173,11 @@ export class AuthService {
     const phoneKey = `registration-phone:${phoneNumber}`;
     const otpKey = `otp:phone-verify:${phoneNumber}`;
 
+    // Log phone number and key for debugging
+    this.logger.log(
+      `[DEBUG] Checking OTP for phone: ${phoneNumber}, key: ${otpKey}`,
+    );
+
     // 1. Get registration key by phone
     const registrationKey =
       await this.upstashService.redis.get<string>(phoneKey);
@@ -182,7 +187,7 @@ export class AuthService {
 
     // 2. Load registration data
     const registrationDataRaw =
-      await this.upstashService.redis.get<string>(registrationKey);
+      await this.upstashService.redis.get(registrationKey);
     if (!registrationDataRaw) {
       throw new HttpException(
         'Registration data missing.',
@@ -191,28 +196,50 @@ export class AuthService {
     }
 
     let registrationData: PendingRegistration;
-    try {
-      registrationData = JSON.parse(registrationDataRaw) as PendingRegistration;
-    } catch (e) {
-      throw new HttpException(
-        'Corrupted registration data.',
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
+    if (typeof registrationDataRaw === 'string') {
+      try {
+        registrationData = JSON.parse(
+          registrationDataRaw,
+        ) as PendingRegistration;
+      } catch (e) {
+        this.logger.error(`Failed to parse registration data: ${e}`);
+        throw new HttpException(
+          'Corrupted registration data.',
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
+    } else {
+      registrationData = registrationDataRaw as PendingRegistration;
     }
 
     // 3. Compare OTP
-    const storedOtp = await this.upstashService.redis.get<string>(otpKey);
-    this.logger.log(`[DEBUG] OTP raw value from Redis: ${storedOtp} (type: ${typeof storedOtp})`);
-    if (typeof storedOtp === 'object' || storedOtp === null) {
-      this.logger.error(`[CRITICAL] OTP value is not a string! Value: ${JSON.stringify(storedOtp)}`);
+    const storedOtp = await this.upstashService.redis.get(otpKey);
+    this.logger.log(
+      `[DEBUG] OTP comparison - Received: ${otp} (type: ${typeof otp}), Stored: ${storedOtp} (type: ${typeof storedOtp})`,
+    );
+    if (storedOtp === null) {
+      this.logger.error(`[CRITICAL] OTP not found in Redis for key: ${otpKey}`);
       throw new HttpException(
-        'OTP value in Redis is not a string. Please clear your Redis keys for this phone and try again.',
+        'Invalid or expired OTP. Received: ' + otp,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    if (typeof storedOtp === 'object') {
+      this.logger.error(
+        `[CRITICAL] OTP value is an object! Value: ${JSON.stringify(storedOtp)}`,
+      );
+      throw new HttpException(
+        'OTP value in Redis is not a valid format. Please clear your Redis keys for this phone and try again.',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
-    if (!storedOtp || storedOtp !== otp) {
+    // Convert both to strings for comparison
+    if (String(storedOtp) !== String(otp)) {
+      this.logger.error(
+        `[ERROR] OTP validation failed - Received: ${otp} (type: ${typeof otp}), Stored: ${storedOtp} (type: ${typeof storedOtp})`,
+      );
       throw new HttpException(
-        'Invalid or expired OTP.',
+        `Invalid or expired OTP. Received: ${otp}`,
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -232,7 +259,7 @@ export class AuthService {
     await this.upstashService.redis.del(otpKey);
 
     // 7. Generate and send email verification token
-    const emailToken = uuidv4(); // Make sure uuidv4() is imported
+    const emailToken = uuidv4();
     await this.upstashService.redis.set(
       `email-verify-token:${emailToken}`,
       registrationKey,
@@ -260,20 +287,26 @@ export class AuthService {
 
     // 2. Get registration data
     const registrationDataRaw =
-      await this.upstashService.redis.get<string>(registrationKey);
+      await this.upstashService.redis.get(registrationKey);
     if (!registrationDataRaw) {
       throw new HttpException('Registration not found.', HttpStatus.NOT_FOUND);
     }
 
     let registrationData: PendingRegistration;
-    try {
-      registrationData = JSON.parse(registrationDataRaw) as PendingRegistration;
-    } catch (e) {
-      this.logger.error(`Failed to parse registration data: ${e}`);
-      throw new HttpException(
-        'Corrupted registration data.',
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
+    if (typeof registrationDataRaw === 'string') {
+      try {
+        registrationData = JSON.parse(
+          registrationDataRaw,
+        ) as PendingRegistration;
+      } catch (e) {
+        this.logger.error(`Failed to parse registration data: ${e}`);
+        throw new HttpException(
+          'Corrupted registration data.',
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
+    } else {
+      registrationData = registrationDataRaw as PendingRegistration;
     }
 
     // 3. Mark email as verified
@@ -283,7 +316,7 @@ export class AuthService {
     const expiryOptions: SetCommandOptions = { ex: 3600 };
     await this.upstashService.redis.set(
       registrationKey,
-      JSON.stringify(registrationData),
+      JSON.stringify(registrationData), // Always stringify to ensure consistency
       expiryOptions,
     );
 
@@ -292,7 +325,7 @@ export class AuthService {
       const user = await this.usersService.create({
         email: registrationData.email,
         phoneNumber: registrationData.phoneNumber,
-        password: registrationData.password, // Already hashed
+        password: registrationData.password, 
         name: registrationData.name,
         googleId: null,
         isActive: true,
@@ -322,7 +355,7 @@ export class AuthService {
     if (!user || !user.isActive)
       throw new HttpException('No active account found.', HttpStatus.NOT_FOUND);
 
-    const otp = this._generateOtp();
+    const otp = Number(this._generateOtp());
     await this.upstashService.redis.set(`otp:login:${identifier}`, otp, {
       ex: 300,
     });
@@ -333,7 +366,7 @@ export class AuthService {
           'User has no registered email.',
           HttpStatus.BAD_REQUEST,
         );
-      await this.emailService.sendLoginOtp(user.email, otp);
+      await this.emailService.sendLoginOtp(user.email, otp.toString());
     } else {
       if (!user.phoneNumber)
         throw new HttpException(
@@ -348,10 +381,11 @@ export class AuthService {
   }
 
   async verifyLoginOtp(identifier: string, otp: string): Promise<User> {
-    const storedOtp = await this.upstashService.redis.get<string>(
+    const storedOtp = await this.upstashService.redis.get<number>(
       `otp:login:${identifier}`,
     );
-    if (storedOtp !== otp)
+    const otpNumber = Number(otp);
+    if (typeof storedOtp !== 'number' || storedOtp !== otpNumber)
       throw new HttpException(
         'Invalid or expired OTP.',
         HttpStatus.BAD_REQUEST,
