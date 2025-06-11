@@ -1,7 +1,6 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { randomInt } from 'crypto';
-import { isEmail, isPhoneNumber } from 'class-validator';
+import { isEmail } from 'class-validator';
 import { v4 as uuidv4 } from 'uuid';
 
 import { UsersService } from '../users/users.service';
@@ -14,6 +13,7 @@ import { JwtHelper } from './jwt.helper';
 import { PendingRegistration } from './dto/pending-registration.type';
 import { UpstashService } from '../common/upstash.service';
 import { SetCommandOptions } from '@upstash/redis';
+import { generateOtp, findUserByIdentifier } from './auth.helpers';
 
 type OAuthUserDetails = { googleId: string; email: string; name: string };
 
@@ -107,7 +107,7 @@ export class AuthService {
       );
     }
 
-    const otp = Number(this._generateOtp());
+    const otp = Number(generateOtp());
     const hashedPassword = await EncryptionHelper.hashPassword(password);
     const registrationData: PendingRegistration = {
       email,
@@ -156,7 +156,7 @@ export class AuthService {
       );
     }
 
-    const otp = Number(this._generateOtp());
+    const otp = Number(generateOtp());
     await this.upstashService.redis.set(
       `otp:phone-verify:${phoneNumber}`,
       otp,
@@ -215,7 +215,7 @@ export class AuthService {
     // 3. Compare OTP
     const storedOtp = await this.upstashService.redis.get(otpKey);
     this.logger.log(
-      `[DEBUG] OTP comparison - Received: ${otp} (type: ${typeof otp}), Stored: ${storedOtp} (type: ${typeof storedOtp})`,
+      `[DEBUG] OTP comparison - Received: ${otp} (type: ${typeof otp}), Stored: ${JSON.stringify(storedOtp)} (type: ${typeof storedOtp})`,
     );
     if (storedOtp === null) {
       this.logger.error(`[CRITICAL] OTP not found in Redis for key: ${otpKey}`);
@@ -234,9 +234,9 @@ export class AuthService {
       );
     }
     // Convert both to strings for comparison
-    if (String(storedOtp) !== String(otp)) {
+    if (String(storedOtp ?? '') !== String(otp)) {
       this.logger.error(
-        `[ERROR] OTP validation failed - Received: ${otp} (type: ${typeof otp}), Stored: ${storedOtp} (type: ${typeof storedOtp})`,
+        `[ERROR] OTP validation failed - Received: ${otp} (type: ${typeof otp}), Stored: ${JSON.stringify(storedOtp)} (type: ${typeof storedOtp})`,
       );
       throw new HttpException(
         `Invalid or expired OTP. Received: ${otp}`,
@@ -325,7 +325,7 @@ export class AuthService {
       const user = await this.usersService.create({
         email: registrationData.email,
         phoneNumber: registrationData.phoneNumber,
-        password: registrationData.password, 
+        password: registrationData.password,
         name: registrationData.name,
         googleId: null,
         isActive: true,
@@ -351,11 +351,11 @@ export class AuthService {
   }
 
   async requestLoginOtp(identifier: string): Promise<void> {
-    const user = await this._findUserByIdentifier(identifier);
+    const user = await findUserByIdentifier(this.usersService, identifier);
     if (!user || !user.isActive)
       throw new HttpException('No active account found.', HttpStatus.NOT_FOUND);
 
-    const otp = Number(this._generateOtp());
+    const otp = Number(generateOtp());
     await this.upstashService.redis.set(`otp:login:${identifier}`, otp, {
       ex: 300,
     });
@@ -391,27 +391,19 @@ export class AuthService {
         HttpStatus.BAD_REQUEST,
       );
 
-    const user = await this._findUserByIdentifier(identifier);
+    const user = await findUserByIdentifier(this.usersService, identifier);
     if (!user) throw new HttpException('User not found.', HttpStatus.NOT_FOUND);
 
     await this.upstashService.redis.del(`otp:login:${identifier}`);
     return user;
   }
 
+  async deleteAccount(userId: string): Promise<void> {
+    // Use the UsersService to delete the user by id
+    await this.usersService.delete(userId);
+  }
+
   generateJwt(user: User): string {
     return JwtHelper.generateJwt(user, this.jwtService);
-  }
-
-  private _generateOtp(): string {
-    return randomInt(100000, 999999).toString();
-  }
-
-  private async _findUserByIdentifier(
-    identifier: string,
-  ): Promise<User | null> {
-    if (isEmail(identifier)) return this.usersService.findByEmail(identifier);
-    if (isPhoneNumber(identifier, 'ET'))
-      return this.usersService.findByPhoneNumber(identifier);
-    return null;
   }
 }

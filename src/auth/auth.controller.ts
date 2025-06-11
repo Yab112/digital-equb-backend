@@ -9,10 +9,12 @@ import {
   Query,
   HttpException,
   HttpStatus,
+  Delete,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { Response, Request } from 'express';
 import { AuthService } from './auth.service';
+import { setTokenCookie } from './cookie.helper';
 
 // DTO Imports
 import { StartRegistrationDto } from './dto/start-registration.dto';
@@ -50,7 +52,7 @@ export class AuthController {
   ): Promise<void> {
     const user = await this.authService.validateOAuthUser(req.user);
     const accessToken = this.authService.generateJwt(user);
-    this._setTokenCookie(res, accessToken);
+    setTokenCookie(res, accessToken);
     res.redirect('http://localhost:3001/dashboard'); // Redirect to your frontend
   }
 
@@ -98,7 +100,7 @@ export class AuthController {
 
     const user = await this.authService.verifyEmailAndActivate(token);
     const accessToken = this.authService.generateJwt(user);
-    this._setTokenCookie(res, accessToken);
+    setTokenCookie(res, accessToken);
 
     return {
       message: 'Account activated successfully. You are now logged in.',
@@ -123,7 +125,7 @@ export class AuthController {
   ) {
     const user = await this.authService.verifyLoginOtp(dto.identifier, dto.otp);
     const accessToken = this.authService.generateJwt(user);
-    this._setTokenCookie(res, accessToken);
+    setTokenCookie(res, accessToken);
     return { message: 'Login successful.' };
   }
 
@@ -137,17 +139,29 @@ export class AuthController {
       dto.password,
     );
     const accessToken = this.authService.generateJwt(user);
-    this._setTokenCookie(res, accessToken);
+    setTokenCookie(res, accessToken);
     return { message: 'Login successful.' };
   }
 
-  // --- HELPER METHOD ---
-  private _setTokenCookie(res: Response, accessToken: string): void {
-    res.cookie('access_token', accessToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      expires: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
-    });
+  @Post('logout')
+  logout(@Res({ passthrough: true }) res: Response) {
+    res.clearCookie('access_token');
+    return { message: 'Logged out successfully.' };
+  }
+
+  @Delete('delete-account')
+  @UseGuards(AuthGuard('jwt'))
+  async deleteAccount(@Req() req: Request) {
+    // Use a type assertion to ensure req.user is typed
+    const user = req.user as { id?: string };
+    const userId = user && typeof user.id === 'string' ? user.id : null;
+    if (!userId) {
+      throw new HttpException(
+        'User not found in request.',
+        HttpStatus.UNAUTHORIZED,
+      );
+    }
+    await this.authService.deleteAccount(userId);
+    return { message: 'Account deleted successfully.' };
   }
 }
