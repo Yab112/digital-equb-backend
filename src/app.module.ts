@@ -6,7 +6,6 @@ import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { EqubGroupsModule } from './equb-groups/equb-groups.module';
-import { TransactionsModule } from './transactions/transactions.module';
 import * as redisStore from 'cache-manager-redis-store';
 import { CommonModule } from './common/common.module';
 import { User } from './users/user.entity';
@@ -49,7 +48,6 @@ import { CacheModule } from '@nestjs/cache-manager';
     AuthModule,
     UsersModule,
     EqubGroupsModule,
-    TransactionsModule,
     CommonModule,
   ],
   controllers: [AppController],

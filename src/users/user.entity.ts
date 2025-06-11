@@ -4,7 +4,10 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
+  OneToMany,
 } from 'typeorm';
+import { Membership } from '../equb-groups/entities/membership.entity';
+import { EqubGroup } from '../equb-groups/entities/equb-group.entity';
 
 @Entity('users')
 export class User {
@@ -45,4 +48,10 @@ export class User {
 
   @Column({ nullable: true, type: 'varchar' })
   password: string | null;
+
+  @OneToMany(() => Membership, (membership) => membership.user)
+  memberships: Membership[];
+
+  @OneToMany(() => EqubGroup, (group) => group.owner)
+  ownedEqubs: EqubGroup[];
 }
