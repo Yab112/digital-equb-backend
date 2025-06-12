@@ -199,12 +199,17 @@ npm run typeorm migration:run
 npm run typeorm migration:revert
 ```
 
-## 📚 API Documentation
+## API Documentation
 
-Once the application is running, you can access:
+After starting the server, you can access the automatically generated Swagger (OpenAPI) documentation at:
 
-- **Swagger UI**: `http://localhost:3000/api`
-- **Health Check**: `http://localhost:3000/health`
+```
+http://localhost:3000/api
+```
+
+This provides an interactive UI to explore and test all available endpoints, view request/response schemas, and see authentication requirements.
+
+---
 
 ## 🤝 Contributing
 
