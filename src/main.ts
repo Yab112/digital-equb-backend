@@ -4,9 +4,11 @@ import { LoggerService } from './common/logger/logger.service';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
+const logger = new LoggerService();
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
-    logger: new LoggerService(),
+    logger,
   });
   app.useGlobalPipes(new ValidationPipe());
 
@@ -23,6 +25,8 @@ async function bootstrap() {
   await app.listen(3000);
 }
 bootstrap().catch((err) => {
-  // eslint-disable-next-line no-console
-  console.error('NestJS application failed to start:', err);
+  logger.error(
+    'NestJS application failed to start:',
+    err instanceof Error ? err.stack : String(err),
+  );
 });

@@ -15,6 +15,12 @@ import { AuthGuard } from '@nestjs/passport';
 import { Response, Request } from 'express';
 import { AuthService } from './auth.service';
 import { setTokenCookie } from './cookie.helper';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
 
 // DTO Imports
 import { StartRegistrationDto } from './dto/start-registration.dto';
@@ -33,18 +39,27 @@ interface AuthenticatedRequest extends Request {
   };
 }
 
+@ApiTags('Authentication')
 @Controller('auth')
+@ApiBearerAuth()
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   // --- GOOGLE OAUTH ROUTES ---
   @Get('google')
+  @ApiOperation({ summary: 'Initiate Google OAuth2 login flow' })
+  @ApiResponse({ status: 200, description: 'Redirects to Google login.' })
   @UseGuards(AuthGuard('google'))
   googleAuth(): void {
     // Initiates the Google OAuth2 login flow
   }
 
   @Get('google/callback')
+  @ApiOperation({ summary: 'Google OAuth2 callback' })
+  @ApiResponse({
+    status: 302,
+    description: 'Redirects to dashboard after successful login.',
+  })
   @UseGuards(AuthGuard('google'))
   async googleAuthCallback(
     @Req() req: AuthenticatedRequest,
@@ -58,6 +73,8 @@ export class AuthController {
 
   // --- COMBINED REGISTRATION ROUTES ---
   @Post('register/start')
+  @ApiOperation({ summary: 'Start registration (send OTP to phone)' })
+  @ApiResponse({ status: 201, description: 'Verification OTP sent.' })
   async startRegistration(
     @Body() dto: StartRegistrationDto,
   ): Promise<{ message: string }> {
@@ -71,6 +88,11 @@ export class AuthController {
   }
 
   @Post('register/resend-otp')
+  @ApiOperation({ summary: 'Resend phone verification OTP' })
+  @ApiResponse({
+    status: 201,
+    description: 'A new verification OTP has been sent.',
+  })
   async resendOtp(
     @Body() dto: ResendPhoneVerificationDto,
   ): Promise<{ message: string }> {
@@ -79,6 +101,8 @@ export class AuthController {
   }
 
   @Post('register/verify-phone')
+  @ApiOperation({ summary: 'Verify phone number with OTP' })
+  @ApiResponse({ status: 201, description: 'Phone number verified.' })
   async verifyPhone(@Body() dto: VerifyPhoneDto): Promise<{ message: string }> {
     await this.authService.verifyPhoneNumber(dto.phoneNumber, dto.otp);
     return {
@@ -88,6 +112,8 @@ export class AuthController {
   }
 
   @Get('register/verify-email')
+  @ApiOperation({ summary: 'Verify email and activate account' })
+  @ApiResponse({ status: 200, description: 'Account activated and logged in.' })
   async verifyEmailAndActivate(
     @Query('token') token: string,
     @Res({ passthrough: true }) res: Response,
@@ -109,6 +135,8 @@ export class AuthController {
 
   // --- UNIFIED LOGIN ROUTES ---
   @Post('login/request-otp')
+  @ApiOperation({ summary: 'Request OTP for login (email or phone)' })
+  @ApiResponse({ status: 201, description: 'Login OTP sent.' })
   async requestLoginOtp(
     @Body() dto: RequestLoginOtpDto,
   ): Promise<{ message: string }> {
@@ -119,6 +147,8 @@ export class AuthController {
   }
 
   @Post('login/verify-otp')
+  @ApiOperation({ summary: 'Verify login OTP' })
+  @ApiResponse({ status: 200, description: 'Login successful.' })
   async verifyLoginOtp(
     @Body() dto: VerifyLoginOtpDto,
     @Res({ passthrough: true }) res: Response,
@@ -130,6 +160,8 @@ export class AuthController {
   }
 
   @Post('login/password')
+  @ApiOperation({ summary: 'Login with email and password' })
+  @ApiResponse({ status: 200, description: 'Login successful.' })
   async loginWithPassword(
     @Body() dto: LoginWithPasswordDto,
     @Res({ passthrough: true }) res: Response,
@@ -144,12 +176,16 @@ export class AuthController {
   }
 
   @Post('logout')
+  @ApiOperation({ summary: 'Logout (clear access token cookie)' })
+  @ApiResponse({ status: 200, description: 'Logged out successfully.' })
   logout(@Res({ passthrough: true }) res: Response) {
     res.clearCookie('access_token');
     return { message: 'Logged out successfully.' };
   }
 
   @Delete('delete-account')
+  @ApiOperation({ summary: 'Delete the authenticated user account' })
+  @ApiResponse({ status: 200, description: 'Account deleted successfully.' })
   @UseGuards(AuthGuard('jwt'))
   async deleteAccount(@Req() req: Request) {
     // Use a type assertion to ensure req.user is typed

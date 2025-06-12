@@ -28,12 +28,14 @@ src/
 ## 🚀 Features
 
 - 🔒 **Authentication**
+
   - JWT-based authentication
   - Google OAuth 2.0
   - Phone number verification via OTP
   - Role-based access control
 
 - 💰 **Equb Management**
+
   - Create and manage Equb groups
   - Member management
   - Payment cycle tracking
@@ -41,6 +43,7 @@ src/
   - Payout automation
 
 - 📱 **Real-time Updates**
+
   - WebSocket integration for live updates
   - Event-driven architecture
 
@@ -65,23 +68,27 @@ src/
 The easiest way to get started is using Docker Compose:
 
 1. **Clone the repository**
+
    ```bash
    git clone <your-repository-url>
    cd digital-equb-backend
    ```
 
 2. **Set up environment variables**
+
    ```bash
    cp .env.example .env
    # Edit .env with your configuration
    ```
 
 3. **Build and start services**
+
    ```bash
    docker-compose up --build
    ```
 
    This will start:
+
    - NestJS application on port 3000
    - PostgreSQL on port 5432
    - Redis on port 6379
@@ -95,15 +102,18 @@ The easiest way to get started is using Docker Compose:
 If you prefer to run the services manually:
 
 1. **Install dependencies**
+
    ```bash
    npm install
    ```
 
 2. **Set up the database**
+
    - Create a PostgreSQL database
    - Update the `DATABASE_URL` in your `.env` file
 
 3. **Run database migrations**
+
    ```bash
    npm run typeorm migration:run
    ```
