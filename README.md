@@ -1,98 +1,226 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Digital Equb Backend
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+[![NestJS](https://img.shields.io/badge/NestJS-E0234E?style=for-the-badge&logo=nestjs&logoColor=white)](https://nestjs.com/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![Redis](https://img.shields.io/badge/Redis-DC382D?style=for-the-badge&logo=redis&logoColor=white)](https://redis.io/)
+[![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+A robust backend service for managing digital Equb (a traditional rotating savings and credit association) built with NestJS, TypeScript, PostgreSQL, and Redis.
 
-## Description
+## 🏗 Project Structure
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+This project follows a **Modular Monolith** architecture, logically separated into feature-based modules for better maintainability and scalability.
 
-## Project setup
-
-```bash
-$ npm install
+```
+src/
+├── auth/               # Authentication & authorization (JWT, Google OAuth, OTP)
+├── users/              # User management and profiles
+├── equb-groups/        # Core business logic for Equb groups and transactions
+├── common/             # Shared utilities and services
+│   ├── upstash.service.ts  # Redis-based caching and rate limiting
+│   ├── twilio.service.ts   # SMS notifications
+│   └── email.service.ts    # Email notifications
+├── app.module.ts       # Root application module
+└── main.ts             # Application entry point
 ```
 
-## Compile and run the project
+## 🚀 Features
 
-```bash
-# development
-$ npm run start
+- 🔒 **Authentication**
+  - JWT-based authentication
+  - Google OAuth 2.0
+  - Phone number verification via OTP
+  - Role-based access control
 
-# watch mode
-$ npm run start:dev
+- 💰 **Equb Management**
+  - Create and manage Equb groups
+  - Member management
+  - Payment cycle tracking
+  - Transaction history
+  - Payout automation
 
-# production mode
-$ npm run start:prod
+- 📱 **Real-time Updates**
+  - WebSocket integration for live updates
+  - Event-driven architecture
+
+- 🛡 **Security**
+  - Rate limiting
+  - Input validation and sanitization
+  - Secure password hashing
+  - CORS protection
+
+## 🛠 Prerequisites
+
+- Node.js (v18+)
+- npm or yarn
+- Docker and Docker Compose
+- PostgreSQL (or use Docker)
+- Redis (or use Docker)
+- Twilio account (for SMS verification)
+- Google OAuth credentials (for social login)
+
+## 🚀 Quick Start with Docker
+
+The easiest way to get started is using Docker Compose:
+
+1. **Clone the repository**
+   ```bash
+   git clone <your-repository-url>
+   cd digital-equb-backend
+   ```
+
+2. **Set up environment variables**
+   ```bash
+   cp .env.example .env
+   # Edit .env with your configuration
+   ```
+
+3. **Build and start services**
+   ```bash
+   docker-compose up --build
+   ```
+
+   This will start:
+   - NestJS application on port 3000
+   - PostgreSQL on port 5432
+   - Redis on port 6379
+   - Redis Commander (GUI) on port 8081
+
+4. **Access the API**
+   The API will be available at `http://localhost:3000`
+
+## 🛠 Manual Installation
+
+If you prefer to run the services manually:
+
+1. **Install dependencies**
+   ```bash
+   npm install
+   ```
+
+2. **Set up the database**
+   - Create a PostgreSQL database
+   - Update the `DATABASE_URL` in your `.env` file
+
+3. **Run database migrations**
+   ```bash
+   npm run typeorm migration:run
+   ```
+
+4. **Start the development server**
+   ```bash
+   npm run start:dev
+   ```
+
+## 🔧 Environment Variables
+
+Create a `.env` file in the root directory with the following variables:
+
+```env
+# Application
+NODE_ENV=development
+PORT=3000
+
+# Database
+DATABASE_URL=postgresql://username:password@localhost:5432/equb_db
+
+# JWT
+JWT_SECRET=your_jwt_secret_key
+
+# Redis
+REDIS_URL=redis://localhost:6379
+
+# Twilio (for SMS)
+TWILIO_ACCOUNT_SID=your_account_sid
+TWILIO_AUTH_TOKEN=your_auth_token
+TWILIO_PHONE_NUMBER=your_twilio_number
+
+# Google OAuth
+GOOGLE_CLIENT_ID=your_google_client_id
+GOOGLE_CLIENT_SECRET=your_google_client_secret
+GOOGLE_CALLBACK_URL=http://localhost:3000/auth/google/callback
+
+# Email (SMTP)
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_USER=your_email@example.com
+SMTP_PASSWORD=your_email_password
+SMTP_FROM=noreply@example.com
 ```
 
-## Run tests
+## 🧪 Testing
+
+Run the test suite:
 
 ```bash
-# unit tests
-$ npm run test
+# Unit tests
+npm run test
 
-# e2e tests
-$ npm run test:e2e
+# E2E tests
+npm run test:e2e
 
-# test coverage
-$ npm run test:cov
+# Test coverage
+npm run test:cov
 ```
 
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+## 🐳 Docker Commands
 
 ```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+# Build the application
+npm run build
+
+# Build Docker image
+docker build -t digital-equb-backend .
+
+# Run with Docker
+docker run -p 3000:3000 --env-file .env digital-equb-backend
+
+# View running containers
+docker ps
+
+# View logs
+docker logs <container_id>
+
+# Stop all containers
+docker-compose down
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+## 🔄 Database Migrations
 
-## Resources
+```bash
+# Generate new migration
+npm run typeorm migration:generate src/migrations/NameOfMigration
 
-Check out a few resources that may come in handy when working with NestJS:
+# Run migrations
+npm run typeorm migration:run
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+# Revert last migration
+npm run typeorm migration:revert
+```
 
-## Support
+## 📚 API Documentation
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+Once the application is running, you can access:
 
-## Stay in touch
+- **Swagger UI**: `http://localhost:3000/api`
+- **Health Check**: `http://localhost:3000/health`
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+## 🤝 Contributing
 
-## License
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- [NestJS](https://nestjs.com/) - A progressive Node.js framework
+- [TypeORM](https://typeorm.io/) - Amazing ORM for TypeScript and JavaScript
+- [Twilio](https://www.twilio.com/) - For SMS verification
+- [Redis](https://redis.io/) - For caching and rate limiting

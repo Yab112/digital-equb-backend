@@ -1,21 +1,43 @@
-# Use official Node.js LTS image
-FROM node:20-alpine
+# Build stage
+FROM node:20-alpine AS builder
 
-# Set working directory
 WORKDIR /app
 
-# Install app dependencies
+# Copy package files
 COPY package*.json ./
-RUN npm install --production
+COPY tsconfig*.json ./
+
+# Install all dependencies including devDependencies
+RUN npm install
 
 # Copy source code
 COPY . .
 
-# Build the app
+# Build the application
 RUN npm run build
+
+# Production stage
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install only production dependencies
+RUN npm install --production
+
+# Copy built files from builder stage
+COPY --from=builder /app/dist ./dist
+
+# Copy environment file
+COPY .env ./.env
+
+# Set environment to production
+ENV NODE_ENV=production
 
 # Expose the app port
 EXPOSE 3000
 
 # Start the app
-CMD ["npm", "run", "start:prod"]
+CMD ["node", "dist/main"]
