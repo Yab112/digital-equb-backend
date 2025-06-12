@@ -234,7 +234,16 @@ export class AuthService {
       );
     }
     // Convert both to strings for comparison
-    if (String(storedOtp ?? '') !== String(otp)) {
+    if (typeof storedOtp !== 'string' && typeof storedOtp !== 'number') {
+      this.logger.error(
+        `[ERROR] OTP in Redis is not a string or number. Value: ${JSON.stringify(storedOtp)} (type: ${typeof storedOtp})`,
+      );
+      throw new HttpException(
+        'OTP value in Redis is not a valid format.',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+    if (String(storedOtp) !== String(otp)) {
       this.logger.error(
         `[ERROR] OTP validation failed - Received: ${otp} (type: ${typeof otp}), Stored: ${JSON.stringify(storedOtp)} (type: ${typeof storedOtp})`,
       );

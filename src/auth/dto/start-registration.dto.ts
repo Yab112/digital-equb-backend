@@ -1,5 +1,4 @@
 import { IsEmail, IsNotEmpty, IsPhoneNumber, IsString } from 'class-validator';
-/* eslint-disable @typescript-eslint/no-unsafe-call */
 export class StartRegistrationDto {
   @IsEmail()
   @IsNotEmpty()
