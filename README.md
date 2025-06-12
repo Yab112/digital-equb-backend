@@ -70,7 +70,7 @@ The easiest way to get started is using Docker Compose:
 1. **Clone the repository**
 
    ```bash
-   git clone <your-repository-url>
+   git clone https://github.com/Yab112/digital-equb-backend.git
    cd digital-equb-backend
    ```
 
